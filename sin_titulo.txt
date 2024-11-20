@@ -1,0 +1,104 @@
+1. Obtener las facturas con su detalle que contengan los productos 1, 56, 96
+
+SELECT * FROM Factura f
+	JOIN DetalleFactura df ON f.nFactura = df.nFactura
+	JOIN Producto p ON df.idProducto = p.idProducto
+WHERE p.idProducto IN (1, 56, 96);
+
+2. Crear una función que reciba dos fechas y muestre las facturas entre ellas con su detalle
+
+CREATE FUNCTION ObtenerFacturasEntreFechas
+	(@fecha1 DATE, 
+	@fecha2 DATE)
+RETURNS TABLE
+AS
+RETURN (
+    SELECT f.nFactura, f.fecha, c.nombre, SUM(df.cantidad * df.precio) AS total_facturado
+    FROM Factura f
+    JOIN DetalleFactura df ON f.idFactura = df.idFactura
+    JOIN Cliente c ON f.idCliente = c.idCliente
+    WHERE (@fecha1 IS NULL OR f.fecha >= @fecha1)
+      AND (@fecha2 IS NULL OR f.fecha <= @fecha2)
+    GROUP BY f.idFactura, f.fecha, c.nombre
+);
+
+
+3. Procedimiento para obtener facturas con más de 2 productos diferentes y total facturado
+
+CREATE PROCEDURE ObtenerFacturasConMasDeDosProductos
+	(@fecha1 DATE, 
+	@fecha2 DATE)
+BEGIN
+    SELECT f.idFactura, COUNT(DISTINCT df.idProducto) AS productos_diferentes, SUM(df.cantidad * df.precio) AS total_facturado
+    FROM Factura f
+    JOIN DetalleFactura df ON f.idFactura = df.idFactura
+    WHERE (@fecha1 IS NULL OR f.fecha >= @fecha1)
+      AND (@fechaFin IS NULL OR f.fecha <= @fecha2)
+    GROUP BY f.idFactura
+    HAVING productos_diferentes > 2;
+END;
+
+
+
+4. Procedimiento para dar de alta una factura
+
+CREATE PROCEDURE pa_AltaFactura
+	(@idCliente INT, 
+	@fecha DATE, 
+	@detalles NVARCHAR(MAX))
+BEGIN
+    INSERT INTO Factura (idCliente, fecha, detalles) VALUES (@idCliente, @fecha, @detalles);
+END;
+
+go
+
+
+
+
+5. Procedimiento para dar de baja un producto si no está asociado a facturas
+
+CREATE PROCEDURE pa_BajaProducto(@idProducto INT)
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM DetalleFactura WHERE idProducto = @idProducto) THEN
+        DELETE FROM Producto WHERE idProducto = @idProducto;
+        SELECT 'Producto dado de baja';
+    ELSE
+        SELECT 'Este producto no se dio de baja';
+    END IF;
+END;
+
+go
+
+
+
+
+6. Procedimiento para modificar stock de un producto a 0
+
+CREATE PROCEDURE pa_ModificarStockCero(@idProducto INT)
+BEGIN
+    UPDATE Producto
+    SET stock = 0
+    WHERE idProducto = @idProducto;
+END;
+
+
+execute
+pa_ModificarProducto 2
+
+
+
+
+
+7. Función para obtener facturas de clientes cuyo nombre empieza con cierto texto y no tienen teléfono
+
+CREATE FUNCTION ObtenerFacturasSinTelefono(@nombre VARCHAR(50))
+RETURNS TABLE
+AS
+RETURN (
+    SELECT f.idFactura, f.fecha, c.nombre, c.telefono, SUM(df.cantidad * df.precio) AS total_facturado
+    FROM Factura f
+    JOIN Cliente c ON f.idCliente = c.idCliente
+    LEFT JOIN DetalleFactura df ON f.idFactura = df.idFactura
+    WHERE c.nombre LIKE CONCAT(@nombre, '%') AND c.telefono IS NULL
+    GROUP BY f.idFactura, f.fecha, c.nombre, c.telefono
+);
